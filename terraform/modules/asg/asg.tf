@@ -7,7 +7,7 @@ resource "aws_launch_configuration" "lc" {
   name_prefix                 = "${var.name}-lc-"
   image_id                    = data.aws_ami.app_ami.id
   instance_type               = var.ec2_instance_type
-  #security_groups             = [var.security_groups]
+  security_groups             = [var.security_groups]
   #iam_instance_profile        = var.iam_instance_profile
 
   key_name                    = aws_key_pair.key_pair.id
@@ -28,7 +28,7 @@ resource "aws_launch_configuration" "lc" {
 resource "aws_autoscaling_group" "asg" {
   count                       = var.create_asg
   launch_configuration        = var.create_lc ? element(aws_launch_configuration.lc.*.name, 0) : var.launch_configuration
-  name_prefix                 = "${var.name}-asg-"
+  name                        = "${var.name}-asg"
   max_size                    = var.asg_max_size
   min_size                    = var.asg_min_size
   vpc_zone_identifier         = [var.vpc_zone_identifier]
@@ -58,6 +58,19 @@ resource "aws_autoscaling_group" "asg" {
 
   depends_on  = ["aws_launch_configuration.lc"]
 }
+resource "aws_autoscaling_lifecycle_hook" "autoscaling_lifecycle_hook" {
+  name                    = "lf-hook"
+  autoscaling_group_name  = "${var.name}-asg"
+  lifecycle_transition    = var.autoscaling_lifecycle_hook_lifecycle_transition
+  role_arn                = data.aws_iam_role.sns_role.arn
+
+  lifecycle {
+    create_before_destroy   = true
+    ignore_changes          = []
+  }
+
+  depends_on = ["aws_autoscaling_group.asg"]
+}
 data "aws_ami" "app_ami" {
   most_recent = true
   owners = ["self"]
@@ -65,4 +78,7 @@ data "aws_ami" "app_ami" {
     name   = "name"
     values = ["aws_test*"]
   }
+}
+data "aws_iam_role" "sns_role" {
+  name = "sns_role"
 }
