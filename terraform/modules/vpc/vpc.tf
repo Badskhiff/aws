@@ -3,8 +3,7 @@ resource "aws_vpc" "test_vpc" {
   instance_tenancy                    = var.instance_tenancy
   enable_dns_support                  = var.enable_dns_support
   enable_dns_hostnames                = var.enable_dns_hostnames
-  
-  tags {
+  tags = {
     Name = var.name
   }
 }
@@ -15,7 +14,7 @@ resource "aws_subnet" "public_subnets" {
   map_public_ip_on_launch = var.map_public_ip_on_launch
   availability_zone       = element(var.availability_zones, 0)
   depends_on              = ["aws_vpc.test_vpc"]
-  tags {
+  tags = {
     Name                  = "Public subnet"
   }
 }
@@ -26,7 +25,7 @@ resource "aws_subnet" "private_subnets" {
   map_public_ip_on_launch = "false"
   availability_zone       = element(var.availability_zones, 0)
   depends_on              = ["aws_vpc.test_vpc"]
-  tags {
+  tags = {
     Name                  = "Private subnet"
   }
 }
