@@ -1,22 +1,37 @@
-pipeline {
-  stages {
-    stage('Create Packer AMI') {
-        steps {
-        {
-            sh 'packer build packer/ami.json'
-        }
-      }
-    }
-    stage('AWS Deployment') {
-      steps {
-      {
-            sh '''
-               cd node-app-terraform
-               terraform init
-               terraform apply -auto-approve
-            '''
-        }
-      }
-    }
-  }
+timestamps {
+
+node () {
+
+	stage ('aws - Checkout') {
+ 	 checkout([$class: 'GitSCM', branches: [[name: '*/master']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: '', url: 'https://github.com/Badskhiff/aws.git']]]) 
+	}
+	stage ('aws - Build') {
+ 	
+// Shell build step
+sh """ 
+cd terraform/playbook/vpc
+terraform init
+terraform apply -auto-approve 
+ """		// Shell build step
+sh """ 
+cd terraform/playbook/iam
+terraform init
+terraform apply -auto-approve 
+ """		// Shell build step
+sh """ 
+cd packer
+packer build ami.json 
+ """		// Shell build step
+sh """ 
+cd terraform/playbook/asg
+terraform init
+terraform apply -auto-approve 
+ """		// Shell build step
+sh """ 
+cd terraform/playbook/alb
+terraform init
+terraform apply -auto-approve 
+ """ 
+	}
+}
 }
