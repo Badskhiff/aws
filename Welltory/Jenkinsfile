@@ -1,0 +1,114 @@
+def configuration = [
+        vaultUrl: 'https://vault:8200',
+        vaultCredentialId: 'vault_token_from_vault',
+        engineVersion: 2
+]
+
+def get_paswd(path,key){
+    secrets = [
+            [
+                    path: path,
+                    engineVersion: 2,
+                    secretValues: [
+                            [envVar: 'db_passwd', vaultKey: key]
+                    ]
+            ]
+    ]
+}
+
+pipeline {
+    agent {
+        docker '.dkr.ecr.eu-west-1.amazonaws.com/buildenv:1.0.0'
+    }
+    environment {
+//        #############################_PROD_ENV_#################################
+
+        account_1_db_maria_host="eu-west-1.rds.amazonaws.com"
+        account_1_db_maria_user="master"
+        account_1_db_maria_passwd="vault_path"
+
+
+//        #############################_OPS_DB_#############################################
+
+        ops_db_maria_host="eu-west-1.rds.amazonaws.com"
+        ops_db_maria_user="admin"
+        ops_db_maria_passwd="vault_path"
+
+//        #############################_DESTINATION_DB_#######################################
+
+        rnd_db_maria_host="eu-west-1.rds.amazonaws.com"
+        rnd_db_maria_user="master"
+        rnd_db_maria_passwd="vault_path"
+
+//        #############################_OTHER_ENV_###########################################
+    }
+
+    stages {
+        stage('get requirements') {
+            steps {
+                script {
+                    if (env.service_name == 'some_service_name') {
+                        env.db_name = "some_db"
+                        env.db_host = "${account_1_db_maria_host}"
+                        env.db_user = "${account_1_db_maria_user}"
+                        env.clear_script = "jenkins/api-accounts.sql"
+                        env.dbtype = "mysql"
+                        get_paswd(account_1_db_maria_user,db_user)
+                    } else {
+                        echo 'I execute elsewhere'
+                    }
+                }
+            }
+        }
+
+        stage('create_MYSQL_dump'){
+            when {
+                expression { env.dbtype == "mysql" }
+            }
+            steps {
+                withVault([configuration: configuration, vaultSecrets: secrets]) {
+                    script {
+                        sh "MYSQL_PWD=$db_passwd mysqldump -h ${db_host} -u ${db_user} --single-transaction --skip-lock-tables --databases ${db_name} > ~/dump.sql"
+                    }
+                }
+
+                script {
+                    get_paswd(ops_db_maria_passwd,ops_db_maria_user)
+                }
+
+                withVault([configuration: configuration, vaultSecrets: secrets]) {
+                    script {
+                        sh 'MYSQL_PWD=$db_passwd mysql -h ${ops_db_maria_host} -u ${ops_db_maria_user} -e "CREATE DATABASE IF NOT EXISTS ${db_name} ";'
+                        sh 'MYSQL_PWD=$db_passwd mysql -h ${ops_db_maria_host} -u ${ops_db_maria_user}  ${db_name} < ~/dump.sql'
+                        sh 'MYSQL_PWD=$db_passwd mysql -h ${ops_db_maria_host} -u ${ops_db_maria_user}  ${db_name} < ${clear_script}'
+                        cleanWs()
+                        sh 'MYSQL_PWD=$db_passwd mysqldump -h ${ops_db_maria_host} -u ${ops_db_maria_user} ${db_name} > ${db_name}.sql'
+                        sh 'MYSQL_PWD=$db_passwd mysql -h ${ops_db_maria_host} -u ${ops_db_maria_user} -e "DROP DATABASE ${db_name} ";'
+                    }
+                }
+            }
+        }
+
+        stage('download_mysql_dump_to_RND') {
+            when {
+                allOf {
+                    environment name: 'dst', value: "RND"
+                    environment name: 'dbtype', value: 'mysql'
+                }
+            }
+
+            steps {
+                script {
+                    get_paswd(rnd_db_maria_passwd,rnd_db_maria_user)
+                }
+                withVault([configuration: configuration, vaultSecrets: secrets]) {
+                    script {
+                        sh 'MYSQL_PWD=$db_passwd mysql -h ${rnd_db_maria_host} -u ${rnd_db_maria_user} -e "CREATE DATABASE IF NOT EXISTS ${db_name} ";'
+                        sh 'MYSQL_PWD=$db_passwd mysql -h ${rnd_db_maria_host} -u ${rnd_db_maria_user}  ${db_name} < ${db_name}.sql'
+                    }
+                }
+            }
+        }
+
+    }
+}
