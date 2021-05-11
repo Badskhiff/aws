@@ -51,7 +51,7 @@ pipeline {
                         env.db_name = "some_db"
                         env.db_host = "${account_1_db_maria_host}"
                         env.db_user = "${account_1_db_maria_user}"
-                        env.clear_script = "jenkins/api-accounts.sql"
+                        env.clear_script = "script.sql"
                         env.dbtype = "mysql"
                         get_paswd(account_1_db_maria_user,db_user)
                     } else {
